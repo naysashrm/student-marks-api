@@ -1,50 +1,33 @@
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
-from typing import List
-import json
-import os
+import fs from 'fs';
+import path from 'path';
 
-# Initialize FastAPI app
-app = FastAPI()
+// Load student data once when the function is initialized
+const filePath = path.join(process.cwd(), 'api', 'q-vercel-json.json');
+let studentsData = [];
 
-# Enable CORS for all origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=True,
-    allow_methods=["GET"],  # Only allow GET requests
-    allow_headers=["*"],
-)
+try {
+  const fileData = fs.readFileSync(filePath, 'utf8');
+  studentsData = JSON.parse(fileData);
+} catch (error) {
+  console.error("Failed to read or parse JSON file:", error);
+}
 
-# Get the directory of the current file
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# Load student marks data from the same directory as this file
-with open(os.path.join(current_dir, 'q-vercel-python.json')) as f:
-    students_data = json.load(f)
+export default function handler(req, res) {
+  const { name } = req.query;
 
-@app.get("/api")
-async def get_marks(name: List[str] = Query(None)):
-    """
-    Get marks for one or more students by name.
-    Example: /api?name=John&name=Alice
-    """
-    if not name:
-        return {"error": "Please provide at least one name"}
-    
-    marks = []
-    for student_name in name:
-        # Look for the student in the data
-        mark = next((student["marks"] for student in students_data 
-                     if student["name"].lower() == student_name.lower()), None)
-        marks.append(mark)
-    
-    return {"marks": marks}
+  if (!name) {
+    return res.status(400).json({ error: "Please provide at least one name" });
+  }
 
-@app.get("/")
-async def root():
-    return {"message": "Student Marks API. Use /api?name=X&name=Y to get marks."}
+  // Ensure name is always treated as an array
+  const names = Array.isArray(name) ? name : [name];
 
-# This allows running the app with Uvicorn directly
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("index:app", host="0.0.0.0", port=8000, reload=True)
+  const marks = names.map(studentName => {
+    const student = studentsData.find(
+      s => s.name.toLowerCase() === studentName.toLowerCase()
+    );
+    return student ? student.marks : null;
+  });
+
+  res.status(200).json({ marks });
+}
